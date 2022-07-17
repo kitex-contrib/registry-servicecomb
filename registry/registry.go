@@ -38,6 +38,12 @@ func WithHostName(hostName string) Option {
 	}
 }
 
+func WithServiceId(serviceId string) Option {
+	return func(o *options) {
+		o.serviceId = serviceId
+	}
+}
+
 type serviceCombRegistry struct {
 	cli  *sc.Client
 	opts options
@@ -74,6 +80,7 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 	}
 
 	serviceId, err := scr.cli.RegisterService(&discovery.MicroService{
+		ServiceId:   scr.opts.serviceId,
 		ServiceName: info.ServiceName,
 		AppId:       scr.opts.appId,
 		Version:     scr.opts.version,
@@ -100,12 +107,7 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 }
 
 func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
-	_, err := scr.cli.UnregisterMicroServiceInstance(scr.opts.serviceId, scr.opts.instanceId)
-	if err != nil {
-		return fmt.Errorf("Deregister service instance error: %w", err)
-	}
-
-	_, err = scr.cli.UnregisterMicroService(scr.opts.serviceId)
+	_, err := scr.cli.UnregisterMicroService(scr.opts.serviceId)
 	if err != nil {
 		return fmt.Errorf("Deregister service error: %w", err)
 	}
