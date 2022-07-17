@@ -1,10 +1,14 @@
 package servicecomb
 
-import sc "github.com/go-chassis/sc-client"
+import (
+	"github.com/go-chassis/sc-client"
+	"strconv"
+)
 
 func NewDefaultServiceCombClient() (*sc.Client, error) {
+	ep := SCAddr() + ":" + strconv.FormatInt(SCPort(), 10)
 	client, err := sc.NewClient(sc.Options{
-		Endpoints: []string{"127.0.0.1:30100"},
+		Endpoints: []string{ep},
 	})
 	if err != nil {
 		return nil, err
