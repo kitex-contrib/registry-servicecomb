@@ -10,11 +10,9 @@ import (
 )
 
 type options struct {
-	appId      string
-	version    string
-	hostName   string
-	serviceId  string
-	instanceId string
+	appId       string
+	versionRule string
+	hostName    string
 }
 
 // Option is ServiceComb option.
@@ -26,21 +24,15 @@ func WithAppId(appId string) Option {
 	}
 }
 
-func WithVersion(version string) Option {
+func WithVersionRule(versionRule string) Option {
 	return func(o *options) {
-		o.version = version
+		o.versionRule = versionRule
 	}
 }
 
 func WithHostName(hostName string) Option {
 	return func(o *options) {
 		o.hostName = hostName
-	}
-}
-
-func WithServiceId(serviceId string) Option {
-	return func(o *options) {
-		o.serviceId = serviceId
 	}
 }
 
@@ -59,8 +51,8 @@ func NewDefaultServiceCombRegistry(opts ...Option) (registry.Registry, error) {
 
 func NewServiceCombRegistry(client *sc.Client, opts ...Option) registry.Registry {
 	op := options{
-		appId:   "DEFAULT",
-		version: "DEFAULT",
+		appId:       "DEFAULT",
+		versionRule: "1.0.0",
 	}
 	for _, opt := range opts {
 		opt(&op)
@@ -79,20 +71,18 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		return errors.New("registry.Info Addr can not be empty")
 	}
 
-	serviceId, err := scr.cli.RegisterService(&discovery.MicroService{
-		ServiceId:   scr.opts.serviceId,
+	serviceID, err := scr.cli.RegisterService(&discovery.MicroService{
 		ServiceName: info.ServiceName,
 		AppId:       scr.opts.appId,
-		Version:     scr.opts.version,
-		Status:      "UP",
+		Version:     scr.opts.versionRule,
+		Status:      sc.MSInstanceUP,
 	})
 	if err != nil {
 		return fmt.Errorf("register service error: %w", err)
 	}
-	scr.opts.serviceId = serviceId
 
-	instanceId, err := scr.cli.RegisterMicroServiceInstance(&discovery.MicroServiceInstance{
-		ServiceId:  serviceId,
+	_, err = scr.cli.RegisterMicroServiceInstance(&discovery.MicroServiceInstance{
+		ServiceId:  serviceID,
 		Endpoints:  []string{info.Addr.String()},
 		HostName:   scr.opts.hostName,
 		Status:     sc.MSInstanceUP,
@@ -101,15 +91,18 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 	if err != nil {
 		return fmt.Errorf("register service instance error: %w", err)
 	}
-	scr.opts.instanceId = instanceId
 
 	return nil
 }
 
 func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
-	_, err := scr.cli.UnregisterMicroService(scr.opts.serviceId)
+	serviceId, err := scr.cli.GetMicroServiceID(scr.opts.appId, info.ServiceName, scr.opts.versionRule, "")
 	if err != nil {
-		return fmt.Errorf("Deregister service error: %w", err)
+		return fmt.Errorf("get service-id error: %w", err)
+	}
+	_, err = scr.cli.UnregisterMicroService(serviceId)
+	if err != nil {
+		return fmt.Errorf("deregister service error: %w", err)
 	}
 
 	return nil

@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"net"
 	"testing"
-	"time"
 )
 
 func getServiceCombClient() (*sc.Client, error) {
@@ -24,7 +23,7 @@ func TestNewDefaultServiceCombRegistry(t *testing.T) {
 	if err != nil {
 		t.Errorf("err:%v", err)
 	}
-	got := NewServiceCombRegistry(client, WithAppId("DEFAULT"), WithVersion("DEFAULT_GROUP"))
+	got := NewServiceCombRegistry(client, WithAppId("DEFAULT"), WithVersionRule("1.0.0"))
 	assert.NotNil(t, got)
 }
 
@@ -53,16 +52,13 @@ func TestServiceCombRegistryRegister(t *testing.T) {
 			args: args{info: &registry.Info{
 				ServiceName: "demo.kitex-contrib.local",
 				Addr:        &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 3000},
-				Weight:      999,
-				StartTime:   time.Now(),
-				Tags:        map[string]string{"env": "local"},
 			}},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersion("0.1"), WithHostName("ServiceComb-Test"), WithServiceId("TestServiceId"))
+			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"))
 			if err := n.Register(tt.args.info); (err != nil) != tt.wantErr {
 				t.Errorf("Register() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -93,10 +89,6 @@ func TestServiceCombRegistryDeregister(t *testing.T) {
 			name: "common",
 			args: args{info: &registry.Info{
 				ServiceName: "demo.kitex-contrib.local",
-				Addr:        &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 300},
-				Weight:      999,
-				StartTime:   time.Now(),
-				Tags:        map[string]string{"env": "local"},
 			}},
 			fields:  fields{client},
 			wantErr: false,
@@ -104,7 +96,7 @@ func TestServiceCombRegistryDeregister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersion("0.1"), WithHostName("ServiceComb-Test"), WithServiceId("TestServiceId"))
+			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("latest"), WithHostName("DEFAULT"))
 			if err := n.Deregister(tt.args.info); (err != nil) != tt.wantErr {
 				t.Errorf("Deregister() error = %v, wantErr %v", err, tt.wantErr)
 			}
