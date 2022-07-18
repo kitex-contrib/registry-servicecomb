@@ -10,17 +10,17 @@ import (
 )
 
 type options struct {
-	appID       string
+	appId       string
 	versionRule string
-	consumerID  string
+	consumerId  string
 }
 
 // Option is service-comb resolver option.
 type Option func(o *options)
 
-// WithAppID with appID option.
-func WithAppID(appID string) Option {
-	return func(o *options) { o.appID = appID }
+// WithAppId with appId option.
+func WithAppId(appId string) Option {
+	return func(o *options) { o.appId = appId }
 }
 
 // WithVersionRule with versionRule option.
@@ -28,9 +28,9 @@ func WithVersionRule(versionRule string) Option {
 	return func(o *options) { o.versionRule = versionRule }
 }
 
-// WithConsumerID with consumerID option.
-func WithConsumerID(consumerID string) Option {
-	return func(o *options) { o.consumerID = consumerID }
+// WithConsumerId with consumerId option.
+func WithConsumerId(consumerId string) Option {
+	return func(o *options) { o.consumerId = consumerId }
 }
 
 type serviceCombResolver struct {
@@ -39,7 +39,7 @@ type serviceCombResolver struct {
 }
 
 func NewDefaultSCResolver(opts ...Option) (discovery.Resolver, error) {
-	client, err := servicecomb.NewDefaultClient()
+	client, err := servicecomb.NewDefaultServiceCombClient()
 	if err != nil {
 		return nil, err
 	}
@@ -48,9 +48,9 @@ func NewDefaultSCResolver(opts ...Option) (discovery.Resolver, error) {
 
 func NewSCResolver(cli sc.Client, opts ...Option) discovery.Resolver {
 	op := options{
-		appID:       "DEFAULT",
+		appId:       "DEFAULT",
 		versionRule: "1.0.0",
-		consumerID:  "DEFAULT",
+		consumerId:  "DEFAULT",
 	}
 	for _, option := range opts {
 		option(&op)
@@ -68,7 +68,7 @@ func (scr *serviceCombResolver) Target(_ context.Context, target rpcinfo.Endpoin
 
 // Resolve a service info by desc.
 func (scr *serviceCombResolver) Resolve(_ context.Context, desc string) (discovery.Result, error) {
-	res, err := scr.cli.FindMicroServiceInstances(scr.opts.consumerID, scr.opts.appID, desc, scr.opts.versionRule)
+	res, err := scr.cli.FindMicroServiceInstances(scr.opts.consumerId, scr.opts.appId, desc, scr.opts.versionRule)
 	if err != nil {
 		return discovery.Result{}, err
 	}
