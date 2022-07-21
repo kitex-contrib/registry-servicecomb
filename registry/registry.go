@@ -1,12 +1,15 @@
 package registry
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/cloudwego/kitex/pkg/klog"
 	"github.com/cloudwego/kitex/pkg/registry"
 	"github.com/go-chassis/cari/discovery"
 	"github.com/go-chassis/sc-client"
 	"github.com/kitex-contrib/registry-servicecomb/servicecomb"
+	"time"
 )
 
 type options struct {
@@ -18,18 +21,21 @@ type options struct {
 // Option is ServiceComb option.
 type Option func(o *options)
 
+// WithAppId with app id option
 func WithAppId(appId string) Option {
 	return func(o *options) {
 		o.appId = appId
 	}
 }
 
+// WithVersionRule with version rule option
 func WithVersionRule(versionRule string) Option {
 	return func(o *options) {
 		o.versionRule = versionRule
 	}
 }
 
+// WithHostName with host name option
 func WithHostName(hostName string) Option {
 	return func(o *options) {
 		o.hostName = hostName
@@ -41,6 +47,7 @@ type serviceCombRegistry struct {
 	opts options
 }
 
+// NewDefaultServiceCombRegistry create a new default ServiceComb registry
 func NewDefaultServiceCombRegistry(opts ...Option) (registry.Registry, error) {
 	client, err := servicecomb.NewDefaultServiceCombClient()
 	if err != nil {
@@ -49,6 +56,7 @@ func NewDefaultServiceCombRegistry(opts ...Option) (registry.Registry, error) {
 	return NewServiceCombRegistry(client, opts...), nil
 }
 
+// NewServiceCombRegistry create a new ServiceComb registry
 func NewServiceCombRegistry(client *sc.Client, opts ...Option) registry.Registry {
 	op := options{
 		appId:       "DEFAULT",
@@ -60,6 +68,7 @@ func NewServiceCombRegistry(client *sc.Client, opts ...Option) registry.Registry
 	return &serviceCombRegistry{cli: client, opts: op}
 }
 
+// Register a service info to ServiceCOmb
 func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 	if info == nil {
 		return errors.New("registry.Info can not be empty")
@@ -81,7 +90,7 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		return fmt.Errorf("register service error: %w", err)
 	}
 
-	_, err = scr.cli.RegisterMicroServiceInstance(&discovery.MicroServiceInstance{
+	instanceId, err := scr.cli.RegisterMicroServiceInstance(&discovery.MicroServiceInstance{
 		ServiceId:  serviceID,
 		Endpoints:  []string{info.Addr.String()},
 		HostName:   scr.opts.hostName,
@@ -91,6 +100,23 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 	if err != nil {
 		return fmt.Errorf("register service instance error: %w", err)
 	}
+
+	go func(serviceId, instanceId string) {
+		defer func() {
+			if r := recover(); r != nil {
+				klog.CtxErrorf(context.Background(), "beat to ServerComb panic:%+v", r)
+				_ = scr.Deregister(info)
+			}
+		}()
+		for true {
+			success, err := scr.cli.Heartbeat(serviceID, instanceId)
+			if err != nil || !success {
+				klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v", err)
+			}
+			t := time.NewTimer(time.Duration(time.Second.Seconds() * 30))
+			<-t.C
+		}
+	}(serviceID, instanceId)
 
 	return nil
 }
