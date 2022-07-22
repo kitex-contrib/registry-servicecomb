@@ -116,14 +116,15 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 					_ = scr.Deregister(info)
 				}
 			}()
-			for true {
-				success, err := scr.cli.Heartbeat(serviceID, instanceId)
-				if err != nil || !success {
-					//klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v", err)
-					fmt.Printf("beat to ServerComb return error: %+v", err)
+			ticker := time.NewTicker(time.Second * 30)
+			for {
+				select {
+				case <-ticker.C:
+					success, err := scr.cli.Heartbeat(serviceId, instanceId)
+					if err != nil || !success {
+						klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v instance:%v", err, instanceId)
+					}
 				}
-				t := time.NewTimer(time.Duration(time.Second.Seconds() * 60))
-				<-t.C
 			}
 		}(serviceID, instanceId)
 	}
