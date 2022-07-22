@@ -16,6 +16,7 @@ type options struct {
 	appId       string
 	versionRule string
 	hostName    string
+	keepAlive   bool
 }
 
 // Option is ServiceComb option.
@@ -39,6 +40,12 @@ func WithVersionRule(versionRule string) Option {
 func WithHostName(hostName string) Option {
 	return func(o *options) {
 		o.hostName = hostName
+	}
+}
+
+func WithKeepAlive(alive bool) Option {
+	return func(o *options) {
+		o.keepAlive = alive
 	}
 }
 
@@ -101,22 +108,25 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		return fmt.Errorf("register service instance error: %w", err)
 	}
 
-	go func(serviceId, instanceId string) {
-		defer func() {
-			if r := recover(); r != nil {
-				klog.CtxErrorf(context.Background(), "beat to ServerComb panic:%+v", r)
-				_ = scr.Deregister(info)
+	if scr.opts.keepAlive {
+		go func(serviceId, instanceId string) {
+			defer func() {
+				if r := recover(); r != nil {
+					klog.CtxErrorf(context.Background(), "beat to ServerComb panic:%+v", r)
+					_ = scr.Deregister(info)
+				}
+			}()
+			for true {
+				success, err := scr.cli.Heartbeat(serviceID, instanceId)
+				if err != nil || !success {
+					//klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v", err)
+					fmt.Printf("beat to ServerComb return error: %+v", err)
+				}
+				t := time.NewTimer(time.Duration(time.Second.Seconds() * 60))
+				<-t.C
 			}
-		}()
-		for true {
-			success, err := scr.cli.Heartbeat(serviceID, instanceId)
-			if err != nil || !success {
-				klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v", err)
-			}
-			t := time.NewTimer(time.Duration(time.Second.Seconds() * 30))
-			<-t.C
-		}
-	}(serviceID, instanceId)
+		}(serviceID, instanceId)
+	}
 
 	return nil
 }
