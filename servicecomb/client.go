@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-func NewDefaultServiceCombClient() (*sc.Client, error) {
+func NewDefaultSCClient() (*sc.Client, error) {
 	ep := SCAddr() + ":" + strconv.FormatInt(SCPort(), 10)
 	client, err := sc.NewClient(sc.Options{
 		Endpoints: []string{ep},

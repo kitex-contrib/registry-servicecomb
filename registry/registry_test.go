@@ -32,7 +32,7 @@ func TestNewDefaultServiceCombRegistry(t *testing.T) {
 	if err != nil {
 		t.Errorf("err:%v", err)
 	}
-	got := NewServiceCombRegistry(client, WithAppId("DEFAULT"), WithVersionRule("1.0.0"))
+	got := NewSCRegistry(client, WithAppId("DEFAULT"), WithVersionRule("1.0.0"))
 	assert.NotNil(t, got)
 }
 
@@ -67,7 +67,7 @@ func TestServiceCombRegistryRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"))
+			n := NewSCRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"))
 			if err := n.Register(tt.args.info); (err != nil) != tt.wantErr {
 				t.Errorf("Register() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -105,7 +105,7 @@ func TestServiceCombRegistryDeregister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"))
+			n := NewSCRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"))
 			if err := n.Deregister(tt.args.info); (err != nil) != tt.wantErr {
 				t.Errorf("Deregister() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -113,7 +113,7 @@ func TestServiceCombRegistryDeregister(t *testing.T) {
 	}
 }
 
-//  test registry a service
+//  test heartbeat
 func TestServiceCombRegistryHeartBeat(t *testing.T) {
 	client, err := getServiceCombClient()
 	if err != nil {
@@ -134,16 +134,7 @@ func TestServiceCombRegistryHeartBeat(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "common-not-keepalive",
-			fields: fields{client},
-			args: args{info: &registry.Info{
-				ServiceName: serviceName,
-				Addr:        &addr,
-			}},
-			wantErr: false,
-		},
-		{
-			name:   "common-keepalive",
+			name:   "common",
 			fields: fields{client},
 			args: args{info: &registry.Info{
 				ServiceName: serviceName,
@@ -154,23 +145,19 @@ func TestServiceCombRegistryHeartBeat(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			alive := false
-			if tt.name == "common-keepalive" {
-				alive = true
-			}
-			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"), WithKeepAlive(alive))
+			n := NewSCRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"))
 			if err := n.Register(tt.args.info); err != nil {
 				t.Errorf("Register() error = %v", err)
 			}
-			time.Sleep(time.Minute * 3)
-			assert.True(t, existService(t, addr, alive))
+			time.Sleep(time.Minute * 2)
+			assert.True(t, existService(t, addr))
 			_ = n.Deregister(tt.args.info)
 			time.Sleep(time.Second * 10)
 		})
 	}
 }
 
-func existService(t *testing.T, addr net.TCPAddr, wantExist bool) bool {
+func existService(t *testing.T, addr net.TCPAddr) bool {
 	req, _ := http.NewRequest("GET", "http://127.0.0.1:30100/registry/v3/instances?appId=DEFAULT&serviceName="+serviceName+"&version=latest", nil)
 	httpClient := &http.Client{}
 	resp, err := httpClient.Do(req)
@@ -195,9 +182,9 @@ func existService(t *testing.T, addr net.TCPAddr, wantExist bool) bool {
 	}
 
 	for _, instance := range instances {
-		if wantExist && funk.ContainsString(instance.Endpoints, addr.String()) {
+		if funk.ContainsString(instance.Endpoints, addr.String()) {
 			return true
 		}
 	}
-	return !wantExist
+	return false
 }

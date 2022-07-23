@@ -16,7 +16,6 @@ type options struct {
 	appId       string
 	versionRule string
 	hostName    string
-	keepAlive   bool
 }
 
 // Option is ServiceComb option.
@@ -43,28 +42,22 @@ func WithHostName(hostName string) Option {
 	}
 }
 
-func WithKeepAlive(alive bool) Option {
-	return func(o *options) {
-		o.keepAlive = alive
-	}
-}
-
 type serviceCombRegistry struct {
 	cli  *sc.Client
 	opts options
 }
 
-// NewDefaultServiceCombRegistry create a new default ServiceComb registry
-func NewDefaultServiceCombRegistry(opts ...Option) (registry.Registry, error) {
-	client, err := servicecomb.NewDefaultServiceCombClient()
+// NewDefaultSCRegistry create a new default ServiceComb registry
+func NewDefaultSCRegistry(opts ...Option) (registry.Registry, error) {
+	client, err := servicecomb.NewDefaultSCClient()
 	if err != nil {
 		return nil, err
 	}
-	return NewServiceCombRegistry(client, opts...), nil
+	return NewSCRegistry(client, opts...), nil
 }
 
-// NewServiceCombRegistry create a new ServiceComb registry
-func NewServiceCombRegistry(client *sc.Client, opts ...Option) registry.Registry {
+// NewSCRegistry create a new ServiceComb registry
+func NewSCRegistry(client *sc.Client, opts ...Option) registry.Registry {
 	op := options{
 		appId:       "DEFAULT",
 		versionRule: "1.0.0",
@@ -75,7 +68,7 @@ func NewServiceCombRegistry(client *sc.Client, opts ...Option) registry.Registry
 	return &serviceCombRegistry{cli: client, opts: op}
 }
 
-// Register a service info to ServiceCOmb
+// Register a service info to ServiceComb
 func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 	if info == nil {
 		return errors.New("registry.Info can not be empty")
@@ -108,26 +101,26 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		return fmt.Errorf("register service instance error: %w", err)
 	}
 
-	if scr.opts.keepAlive {
-		go func(serviceId, instanceId string) {
-			defer func() {
-				if r := recover(); r != nil {
-					klog.CtxErrorf(context.Background(), "beat to ServerComb panic:%+v", r)
-					_ = scr.Deregister(info)
-				}
-			}()
-			ticker := time.NewTicker(time.Second * 30)
-			for {
-				select {
-				case <-ticker.C:
-					success, err := scr.cli.Heartbeat(serviceId, instanceId)
-					if err != nil || !success {
-						klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v instance:%v", err, instanceId)
-					}
+	go func(serviceId, instanceId string) {
+		defer func() {
+			if r := recover(); r != nil {
+				klog.CtxErrorf(context.Background(), "beat to ServerComb panic:%+v", r)
+				_ = scr.Deregister(info)
+			}
+		}()
+		ticker := time.NewTicker(time.Second * 30)
+		for {
+			select {
+			case <-ticker.C:
+				success, err := scr.cli.Heartbeat(serviceId, instanceId)
+				if err != nil || !success {
+					klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v instance:%v", err, instanceId)
+					ticker.Stop()
+					return
 				}
 			}
-		}(serviceID, instanceId)
-	}
+		}
+	}(serviceID, instanceId)
 
 	return nil
 }
