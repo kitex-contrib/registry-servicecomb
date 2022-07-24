@@ -2,10 +2,15 @@ package registry
 
 import (
 	"github.com/cloudwego/kitex/pkg/registry"
+	"github.com/go-chassis/cari/discovery"
 	"github.com/go-chassis/sc-client"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/thoas/go-funk"
+	"io"
+	"io/ioutil"
 	"net"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -145,7 +150,7 @@ func TestSCRegistryHeartBeat(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewSCRegistry(tt.fields.cli, WithAppId(AppId), WithVersionRule(Version), WithHostName(HostName))
+			n := NewSCRegistry(tt.fields.cli, WithAppId(AppId), WithVersionRule(Version), WithHostName(HostName), WithHeartbeatInterval(60))
 			if err := n.Register(tt.args.info); err != nil {
 				t.Errorf("Register() error = %v", err)
 			}
@@ -211,3 +216,36 @@ func TestSCMultipleInstances(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(instances), "deregister one, instances num should be two")
 }
+
+func existService(t *testing.T, addr net.TCPAddr, wantExist bool) bool {
+	req, _ := http.NewRequest("GET", "http://127.0.0.1:30100/registry/v3/instances?appId=DEFAULT&serviceName="+serviceName+"&version=latest", nil)
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Errorf("http error: %v", err)
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	respByte, _ := ioutil.ReadAll(resp.Body)
+	respMap := make(map[string]interface{})
+	instances := make([]discovery.MicroServiceInstance, 0)
+
+	err = jsoniter.Unmarshal(respByte, &respMap)
+	if instanceList, ok := respMap["instances"]; ok {
+		instanceListJsonByte, _ := jsoniter.Marshal(instanceList)
+		err = jsoniter.Unmarshal(instanceListJsonByte, &instances)
+	}
+	if err != nil {
+		t.Errorf("jsoniter error: %v\n", err)
+	}
+
+	for _, instance := range instances {
+		if wantExist && funk.ContainsString(instance.Endpoints, addr.String()) {
+			return true
+		}
+	}
+	return !wantExist
+}
+
