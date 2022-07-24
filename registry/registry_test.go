@@ -158,7 +158,7 @@ func TestServiceCombRegistryHeartBeat(t *testing.T) {
 			if tt.name == "common-keepalive" {
 				alive = true
 			}
-			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"), WithKeepAlive(alive))
+			n := NewServiceCombRegistry(tt.fields.cli, WithAppId("DEFAULT"), WithVersionRule("1.0.0"), WithHostName("DEFAULT"), WithKeepAlive(alive), WithHeartbeatInterval(60))
 			if err := n.Register(tt.args.info); err != nil {
 				t.Errorf("Register() error = %v", err)
 			}

@@ -13,10 +13,11 @@ import (
 )
 
 type options struct {
-	appId       string
-	versionRule string
-	hostName    string
-	keepAlive   bool
+	appId                   string
+	versionRule             string
+	hostName                string
+	keepAlive               bool
+	heartbeatIntervalSecond int32
 }
 
 // Option is ServiceComb option.
@@ -46,6 +47,12 @@ func WithHostName(hostName string) Option {
 func WithKeepAlive(alive bool) Option {
 	return func(o *options) {
 		o.keepAlive = alive
+	}
+}
+
+func WithHeartbeatInterval(second int32) Option {
+	return func(o *options) {
+		o.heartbeatIntervalSecond = second
 	}
 }
 
@@ -97,12 +104,22 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		return fmt.Errorf("register service error: %w", err)
 	}
 
+	healthCheck := &discovery.HealthCheck{
+		Mode:     "push",
+		Interval: 30,
+		Times:    3,
+	}
+	if scr.opts.heartbeatIntervalSecond > 0 {
+		healthCheck.Interval = scr.opts.heartbeatIntervalSecond
+	}
+
 	instanceId, err := scr.cli.RegisterMicroServiceInstance(&discovery.MicroServiceInstance{
-		ServiceId:  serviceID,
-		Endpoints:  []string{info.Addr.String()},
-		HostName:   scr.opts.hostName,
-		Status:     sc.MSInstanceUP,
-		Properties: info.Tags,
+		ServiceId:   serviceID,
+		Endpoints:   []string{info.Addr.String()},
+		HostName:    scr.opts.hostName,
+		HealthCheck: healthCheck,
+		Status:      sc.MSInstanceUP,
+		Properties:  info.Tags,
 	})
 	if err != nil {
 		return fmt.Errorf("register service instance error: %w", err)
