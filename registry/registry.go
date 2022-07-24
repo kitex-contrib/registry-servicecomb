@@ -9,6 +9,7 @@ import (
 	"github.com/go-chassis/cari/discovery"
 	"github.com/go-chassis/sc-client"
 	"github.com/kitex-contrib/registry-servicecomb/servicecomb"
+	"github.com/thoas/go-funk"
 	"time"
 )
 
@@ -130,9 +131,28 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 	if err != nil {
 		return fmt.Errorf("get service-id error: %w", err)
 	}
-	_, err = scr.cli.UnregisterMicroService(serviceId)
-	if err != nil {
-		return fmt.Errorf("deregister service error: %w", err)
+	if info.Addr == nil {
+		_, err = scr.cli.UnregisterMicroService(serviceId)
+		if err != nil {
+			return fmt.Errorf("deregister service error: %w", err)
+		}
+	} else {
+		instanceId := ""
+		instances, err := scr.cli.FindMicroServiceInstances("", info.Tags["app_id"], info.ServiceName, info.Tags["version"])
+		if err != nil {
+			return fmt.Errorf("get instances error: %w", err)
+		}
+		for _, instance := range instances {
+			if funk.ContainsString(instance.Endpoints, info.Addr.String()) {
+				instanceId = instance.InstanceId
+			}
+		}
+		if instanceId != "" {
+			_, err = scr.cli.UnregisterMicroServiceInstance(serviceId, instanceId)
+			if err != nil {
+				return fmt.Errorf("deregister service error: %w", err)
+			}
+		}
 	}
 
 	return nil
