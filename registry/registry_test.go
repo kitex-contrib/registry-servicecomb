@@ -2,24 +2,20 @@ package registry
 
 import (
 	"github.com/cloudwego/kitex/pkg/registry"
-	"github.com/go-chassis/cari/discovery"
 	"github.com/go-chassis/sc-client"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/thoas/go-funk"
-	"io"
-	"io/ioutil"
 	"net"
-	"net/http"
 	"testing"
 	"time"
 )
 
 const (
-	ServiceName = "demo.kitex-contrib.local"
-	AppId       = "DEFAULT"
-	Version     = "1.0.0"
-	HostName    = "DEFAULT"
+	ServiceName   = "demo.kitex-contrib.local"
+	AppId         = "DEFAULT"
+	Version       = "1.0.0"
+	LatestVersion = "latest"
+	HostName      = "DEFAULT"
 )
 
 func getSCClient() (*sc.Client, error) {
@@ -155,7 +151,7 @@ func TestSCRegistryHeartBeat(t *testing.T) {
 				t.Errorf("Register() error = %v", err)
 			}
 			time.Sleep(time.Minute * 2)
-			instances, err := client.FindMicroServiceInstances("", AppId, ServiceName, Version)
+			instances, err := client.FindMicroServiceInstances("", AppId, ServiceName, LatestVersion)
 			assert.Nil(t, err)
 			exist := false
 			for _, instance := range instances {
@@ -173,7 +169,7 @@ func TestSCMultipleInstances(t *testing.T) {
 	client, err := getSCClient()
 	assert.Nil(t, err)
 	time.Sleep(time.Second)
-	got := NewSCRegistry(client, WithAppId(AppId), WithVersionRule(Version), WithHostName(HostName))
+	got := NewSCRegistry(client, WithAppId(AppId), WithVersionRule(Version), WithHostName(HostName), WithHeartbeatInterval(2))
 	if !assert.NotNil(t, got) {
 		t.Errorf("err: new registry fail")
 		return
@@ -196,56 +192,18 @@ func TestSCMultipleInstances(t *testing.T) {
 	})
 	assert.Nil(t, err)
 
-	//time.Sleep(time.Second)
-	//instances, err := client.FindMicroServiceInstances("", AppId, ServiceName, Version)
-	//assert.Nil(t, err)
-	//assert.Equal(t, 3, len(instances), "successful register not three")
-
 	time.Sleep(time.Second)
 	err = got.Deregister(&registry.Info{
 		ServiceName: ServiceName,
 		Addr:        &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8083},
 		Tags: map[string]string{
 			"app_id":  AppId,
-			"version": Version,
+			"version": LatestVersion,
 		},
 	})
 	assert.Nil(t, err)
-	time.Sleep(time.Second)
-	instances, err := client.FindMicroServiceInstances("", AppId, ServiceName, Version)
+	time.Sleep(time.Minute)
+	instances, err := client.FindMicroServiceInstances("", AppId, ServiceName, LatestVersion)
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(instances), "deregister one, instances num should be two")
 }
-
-func existService(t *testing.T, addr net.TCPAddr, wantExist bool) bool {
-	req, _ := http.NewRequest("GET", "http://127.0.0.1:30100/registry/v3/instances?appId=DEFAULT&serviceName="+serviceName+"&version=latest", nil)
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		t.Errorf("http error: %v", err)
-	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
-
-	respByte, _ := ioutil.ReadAll(resp.Body)
-	respMap := make(map[string]interface{})
-	instances := make([]discovery.MicroServiceInstance, 0)
-
-	err = jsoniter.Unmarshal(respByte, &respMap)
-	if instanceList, ok := respMap["instances"]; ok {
-		instanceListJsonByte, _ := jsoniter.Marshal(instanceList)
-		err = jsoniter.Unmarshal(instanceListJsonByte, &instances)
-	}
-	if err != nil {
-		t.Errorf("jsoniter error: %v\n", err)
-	}
-
-	for _, instance := range instances {
-		if wantExist && funk.ContainsString(instance.Endpoints, addr.String()) {
-			return true
-		}
-	}
-	return !wantExist
-}
-

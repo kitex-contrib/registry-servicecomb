@@ -14,9 +14,9 @@ import (
 )
 
 type options struct {
-	appId       string
-	versionRule string
-	hostName    string
+	appId                   string
+	versionRule             string
+	hostName                string
 	heartbeatIntervalSecond int32
 }
 
@@ -78,6 +78,7 @@ func NewSCRegistry(client *sc.Client, opts ...Option) registry.Registry {
 
 // Register a service info to ServiceComb
 func (scr *serviceCombRegistry) Register(info *registry.Info) error {
+	ctx := context.Background()
 	if info == nil {
 		return errors.New("registry.Info can not be empty")
 	}
@@ -119,26 +120,29 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		return fmt.Errorf("register service instance error: %w", err)
 	}
 
-	go func(serviceId, instanceId string) {
+	go func(ctx context.Context, serviceId, instanceId string) {
 		defer func() {
 			if r := recover(); r != nil {
-				klog.CtxErrorf(context.Background(), "beat to ServerComb panic:%+v", r)
+				klog.CtxErrorf(ctx, "beat to ServerComb panic:%+v", r)
 				_ = scr.Deregister(info)
 			}
 		}()
-		ticker := time.NewTicker(time.Second * 30)
+		ticker := time.NewTicker(time.Second * time.Duration(healthCheck.Interval))
 		for {
 			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
 			case <-ticker.C:
 				success, err := scr.cli.Heartbeat(serviceId, instanceId)
 				if err != nil || !success {
-					klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v instance:%v", err, instanceId)
+					klog.CtxErrorf(ctx, "beat to ServerComb return error:%+v instance:%v", err, instanceId)
 					ticker.Stop()
 					return
 				}
 			}
 		}
-	}(serviceID, instanceId)
+	}(ctx, serviceID, instanceId)
 
 	return nil
 }
@@ -164,6 +168,7 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 				instanceId = instance.InstanceId
 			}
 		}
+		klog.Info(instances)
 		if instanceId != "" {
 			_, err = scr.cli.UnregisterMicroServiceInstance(serviceId, instanceId)
 			if err != nil {
