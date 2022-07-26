@@ -147,6 +147,7 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 	return nil
 }
 
+// Deregister a service or an instance
 func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 	serviceId, err := scr.cli.GetMicroServiceID(scr.opts.appId, info.ServiceName, scr.opts.versionRule, "")
 	if err != nil {
@@ -159,7 +160,7 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 		}
 	} else {
 		instanceId := ""
-		instances, err := scr.cli.FindMicroServiceInstances("", info.Tags["app_id"], info.ServiceName, info.Tags["version"])
+		instances, err := scr.cli.FindMicroServiceInstances("", info.Tags["app_id"], info.ServiceName, info.Tags["version"], sc.WithoutRevision())
 		if err != nil {
 			return fmt.Errorf("get instances error: %w", err)
 		}

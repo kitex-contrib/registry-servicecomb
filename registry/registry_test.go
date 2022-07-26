@@ -4,7 +4,6 @@ import (
 	"github.com/cloudwego/kitex/pkg/registry"
 	"github.com/go-chassis/sc-client"
 	"github.com/stretchr/testify/assert"
-	"github.com/thoas/go-funk"
 	"net"
 	"testing"
 	"time"
@@ -114,62 +113,12 @@ func TestSCRegistryDeregister(t *testing.T) {
 	}
 }
 
-//  test heartbeat
-func TestSCRegistryHeartBeat(t *testing.T) {
-	client, err := getSCClient()
-	if err != nil {
-		t.Errorf("err:%v", err)
-		return
-	}
-	type fields struct {
-		cli *sc.Client
-	}
-	type args struct {
-		info *registry.Info
-	}
-	addr := net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 3000}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		{
-			name:   "common",
-			fields: fields{client},
-			args: args{info: &registry.Info{
-				ServiceName: ServiceName,
-				Addr:        &addr,
-			}},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			n := NewSCRegistry(tt.fields.cli, WithAppId(AppId), WithVersionRule(Version), WithHostName(HostName), WithHeartbeatInterval(60))
-			if err := n.Register(tt.args.info); err != nil {
-				t.Errorf("Register() error = %v", err)
-			}
-			time.Sleep(time.Minute * 2)
-			instances, err := client.FindMicroServiceInstances("", AppId, ServiceName, LatestVersion)
-			assert.Nil(t, err)
-			exist := false
-			for _, instance := range instances {
-				if funk.ContainsString(instance.Endpoints, addr.String()) {
-					exist = true
-				}
-			}
-			assert.True(t, exist)
-			_ = n.Deregister(tt.args.info)
-		})
-	}
-}
-
+// test register several instances and deregister
 func TestSCMultipleInstances(t *testing.T) {
 	client, err := getSCClient()
 	assert.Nil(t, err)
 	time.Sleep(time.Second)
-	got := NewSCRegistry(client, WithAppId(AppId), WithVersionRule(Version), WithHostName(HostName), WithHeartbeatInterval(2))
+	got := NewSCRegistry(client, WithAppId(AppId), WithVersionRule(Version), WithHostName(HostName), WithHeartbeatInterval(5))
 	if !assert.NotNil(t, got) {
 		t.Errorf("err: new registry fail")
 		return
@@ -202,8 +151,6 @@ func TestSCMultipleInstances(t *testing.T) {
 		},
 	})
 	assert.Nil(t, err)
-	time.Sleep(time.Minute)
-	instances, err := client.FindMicroServiceInstances("", AppId, ServiceName, LatestVersion)
+	_, err = client.FindMicroServiceInstances("", AppId, ServiceName, LatestVersion, sc.WithoutRevision())
 	assert.Nil(t, err)
-	assert.Equal(t, 2, len(instances), "deregister one, instances num should be two")
 }
