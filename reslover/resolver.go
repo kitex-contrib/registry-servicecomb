@@ -28,11 +28,6 @@ func WithVersionRule(versionRule string) Option {
 	return func(o *options) { o.versionRule = versionRule }
 }
 
-// WithConsumerId with consumerId option.
-func WithConsumerId(consumerId string) Option {
-	return func(o *options) { o.consumerId = consumerId }
-}
-
 type serviceCombResolver struct {
 	cli  sc.Client
 	opts options
@@ -49,8 +44,7 @@ func NewDefaultSCResolver(opts ...Option) (discovery.Resolver, error) {
 func NewSCResolver(cli sc.Client, opts ...Option) discovery.Resolver {
 	op := options{
 		appId:       "DEFAULT",
-		versionRule: "1.0.0",
-		consumerId:  "DEFAULT",
+		versionRule: "latest",
 	}
 	for _, option := range opts {
 		option(&op)
@@ -68,7 +62,7 @@ func (scr *serviceCombResolver) Target(_ context.Context, target rpcinfo.Endpoin
 
 // Resolve a service info by desc.
 func (scr *serviceCombResolver) Resolve(_ context.Context, desc string) (discovery.Result, error) {
-	res, err := scr.cli.FindMicroServiceInstances(scr.opts.consumerId, scr.opts.appId, desc, scr.opts.versionRule)
+	res, err := scr.cli.FindMicroServiceInstances("", scr.opts.appId, desc, scr.opts.versionRule, sc.WithoutRevision())
 	if err != nil {
 		return discovery.Result{}, err
 	}
