@@ -39,7 +39,7 @@ type serviceCombResolver struct {
 }
 
 func NewDefaultSCResolver(opts ...Option) (discovery.Resolver, error) {
-	client, err := servicecomb.NewDefaultServiceCombClient()
+	client, err := servicecomb.NewDefaultSCClient()
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (scr *serviceCombResolver) Resolve(_ context.Context, desc string) (discove
 	}
 	instances := make([]discovery.Instance, 0, len(res))
 	for _, in := range res {
-		if in.Status != "UP" {
+		if in.Status != sc.MSInstanceUP {
 			continue
 		}
 		for _, endPoint := range in.Endpoints {

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chassis/cari/discovery"
 	"github.com/go-chassis/sc-client"
 	"github.com/kitex-contrib/registry-servicecomb/servicecomb"
+	"github.com/thoas/go-funk"
 	"time"
 )
 
@@ -16,7 +17,6 @@ type options struct {
 	appId                   string
 	versionRule             string
 	hostName                string
-	keepAlive               bool
 	heartbeatIntervalSecond int32
 }
 
@@ -44,12 +44,6 @@ func WithHostName(hostName string) Option {
 	}
 }
 
-func WithKeepAlive(alive bool) Option {
-	return func(o *options) {
-		o.keepAlive = alive
-	}
-}
-
 func WithHeartbeatInterval(second int32) Option {
 	return func(o *options) {
 		o.heartbeatIntervalSecond = second
@@ -61,17 +55,17 @@ type serviceCombRegistry struct {
 	opts options
 }
 
-// NewDefaultServiceCombRegistry create a new default ServiceComb registry
-func NewDefaultServiceCombRegistry(opts ...Option) (registry.Registry, error) {
-	client, err := servicecomb.NewDefaultServiceCombClient()
+// NewDefaultSCRegistry create a new default ServiceComb registry
+func NewDefaultSCRegistry(opts ...Option) (registry.Registry, error) {
+	client, err := servicecomb.NewDefaultSCClient()
 	if err != nil {
 		return nil, err
 	}
-	return NewServiceCombRegistry(client, opts...), nil
+	return NewSCRegistry(client, opts...), nil
 }
 
-// NewServiceCombRegistry create a new ServiceComb registry
-func NewServiceCombRegistry(client *sc.Client, opts ...Option) registry.Registry {
+// NewSCRegistry create a new ServiceComb registry
+func NewSCRegistry(client *sc.Client, opts ...Option) registry.Registry {
 	op := options{
 		appId:       "DEFAULT",
 		versionRule: "1.0.0",
@@ -82,8 +76,9 @@ func NewServiceCombRegistry(client *sc.Client, opts ...Option) registry.Registry
 	return &serviceCombRegistry{cli: client, opts: op}
 }
 
-// Register a service info to ServiceCOmb
+// Register a service info to ServiceComb
 func (scr *serviceCombRegistry) Register(info *registry.Info) error {
+	ctx := context.Background()
 	if info == nil {
 		return errors.New("registry.Info can not be empty")
 	}
@@ -125,38 +120,62 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		return fmt.Errorf("register service instance error: %w", err)
 	}
 
-	if scr.opts.keepAlive {
-		go func(serviceId, instanceId string) {
-			defer func() {
-				if r := recover(); r != nil {
-					klog.CtxErrorf(context.Background(), "beat to ServerComb panic:%+v", r)
-					_ = scr.Deregister(info)
-				}
-			}()
-			ticker := time.NewTicker(time.Second * 30)
-			for {
-				select {
-				case <-ticker.C:
-					success, err := scr.cli.Heartbeat(serviceId, instanceId)
-					if err != nil || !success {
-						klog.CtxErrorf(context.Background(), "beat to ServerComb return error:%+v instance:%v", err, instanceId)
-					}
+	go func(ctx context.Context, serviceId, instanceId string) {
+		defer func() {
+			if r := recover(); r != nil {
+				klog.CtxErrorf(ctx, "beat to ServerComb panic:%+v", r)
+				_ = scr.Deregister(info)
+			}
+		}()
+		ticker := time.NewTicker(time.Second * time.Duration(healthCheck.Interval))
+		for {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				success, err := scr.cli.Heartbeat(serviceId, instanceId)
+				if err != nil || !success {
+					klog.CtxErrorf(ctx, "beat to ServerComb return error:%+v instance:%v", err, instanceId)
+					ticker.Stop()
+					return
 				}
 			}
-		}(serviceID, instanceId)
-	}
+		}
+	}(ctx, serviceID, instanceId)
 
 	return nil
 }
 
+// Deregister a service or an instance
 func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 	serviceId, err := scr.cli.GetMicroServiceID(scr.opts.appId, info.ServiceName, scr.opts.versionRule, "")
 	if err != nil {
 		return fmt.Errorf("get service-id error: %w", err)
 	}
-	_, err = scr.cli.UnregisterMicroService(serviceId)
-	if err != nil {
-		return fmt.Errorf("deregister service error: %w", err)
+	if info.Addr == nil {
+		_, err = scr.cli.UnregisterMicroService(serviceId)
+		if err != nil {
+			return fmt.Errorf("deregister service error: %w", err)
+		}
+	} else {
+		instanceId := ""
+		instances, err := scr.cli.FindMicroServiceInstances("", info.Tags["app_id"], info.ServiceName, info.Tags["version"], sc.WithoutRevision())
+		if err != nil {
+			return fmt.Errorf("get instances error: %w", err)
+		}
+		for _, instance := range instances {
+			if funk.ContainsString(instance.Endpoints, info.Addr.String()) {
+				instanceId = instance.InstanceId
+			}
+		}
+		klog.Info(instances)
+		if instanceId != "" {
+			_, err = scr.cli.UnregisterMicroServiceInstance(serviceId, instanceId)
+			if err != nil {
+				return fmt.Errorf("deregister service error: %w", err)
+			}
+		}
 	}
 
 	return nil
