@@ -1,23 +1,38 @@
+// Copyright 2022 CloudWeGo Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package registry
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/cloudwego/kitex/pkg/klog"
 	"github.com/cloudwego/kitex/pkg/registry"
 	"github.com/go-chassis/cari/discovery"
 	"github.com/go-chassis/sc-client"
 	"github.com/kitex-contrib/registry-servicecomb/servicecomb"
 	"github.com/thoas/go-funk"
-	"time"
 )
 
 type options struct {
-	appId                   string
-	versionRule             string
-	hostName                string
-	heartbeatIntervalSecond int32
+	appId             string
+	versionRule       string
+	hostName          string
+	heartbeatInterval int32
 }
 
 // Option is ServiceComb option.
@@ -46,7 +61,7 @@ func WithHostName(hostName string) Option {
 
 func WithHeartbeatInterval(second int32) Option {
 	return func(o *options) {
-		o.heartbeatIntervalSecond = second
+		o.heartbeatInterval = second
 	}
 }
 
@@ -67,8 +82,10 @@ func NewDefaultSCRegistry(opts ...Option) (registry.Registry, error) {
 // NewSCRegistry create a new ServiceComb registry
 func NewSCRegistry(client *sc.Client, opts ...Option) registry.Registry {
 	op := options{
-		appId:       "DEFAULT",
-		versionRule: "1.0.0",
+		appId:             "DEFAULT",
+		versionRule:       "1.0.0",
+		hostName:          "DEFAULT",
+		heartbeatInterval: 5,
 	}
 	for _, opt := range opts {
 		opt(&op)
@@ -104,8 +121,8 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		Interval: 30,
 		Times:    3,
 	}
-	if scr.opts.heartbeatIntervalSecond > 0 {
-		healthCheck.Interval = scr.opts.heartbeatIntervalSecond
+	if scr.opts.heartbeatInterval > 0 {
+		healthCheck.Interval = scr.opts.heartbeatInterval
 	}
 
 	instanceId, err := scr.cli.RegisterMicroServiceInstance(&discovery.MicroServiceInstance{
