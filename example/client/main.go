@@ -12,21 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package servicecomb
+package main
 
 import (
-	"strconv"
+	"context"
+	"log"
+	"time"
 
-	"github.com/go-chassis/sc-client"
+	"github.com/cloudwego/kitex-examples/hello/kitex_gen/api"
+	"github.com/cloudwego/kitex-examples/hello/kitex_gen/api/hello"
+	"github.com/cloudwego/kitex/client"
+	"github.com/kitex-contrib/registry-servicecomb/resolver"
 )
 
-func NewDefaultSCClient() (*sc.Client, error) {
-	ep := SCAddr() + ":" + strconv.FormatInt(SCPort(), 10)
-	client, err := sc.NewClient(sc.Options{
-		Endpoints: []string{ep},
-	})
+func main() {
+	r, err := resolver.NewDefaultSCResolver()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	return client, nil
+	newClient := hello.MustNewClient(
+		"Hello",
+		client.WithResolver(r),
+		client.WithRPCTimeout(time.Second*3),
+	)
+	for {
+		resp, err := newClient.Echo(context.Background(), &api.Request{Message: "Hello"})
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println(resp)
+		time.Sleep(time.Second)
+	}
 }
