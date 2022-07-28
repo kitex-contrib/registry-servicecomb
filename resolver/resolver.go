@@ -111,5 +111,5 @@ func (scr *serviceCombResolver) Diff(cacheKey string, prev, next discovery.Resul
 
 // Name returns the name of the resolver.
 func (scr *serviceCombResolver) Name() string {
-	return "service-comb-resolver"
+	return "sc-resolver" + ":" + scr.opts.appId + ":" + scr.opts.versionRule
 }
