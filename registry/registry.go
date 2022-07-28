@@ -18,6 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
@@ -27,6 +30,11 @@ import (
 	"github.com/kitex-contrib/registry-servicecomb/servicecomb"
 	"github.com/thoas/go-funk"
 )
+
+type scHeartbeat struct {
+	cancel      context.CancelFunc
+	instanceKey string
+}
 
 type options struct {
 	appId             string
@@ -66,8 +74,10 @@ func WithHeartbeatInterval(second int32) Option {
 }
 
 type serviceCombRegistry struct {
-	cli  *sc.Client
-	opts options
+	cli         *sc.Client
+	opts        options
+	lock        *sync.RWMutex
+	registryIns map[string]*scHeartbeat
 }
 
 // NewDefaultSCRegistry create a new default ServiceComb registry
@@ -90,12 +100,16 @@ func NewSCRegistry(client *sc.Client, opts ...Option) registry.Registry {
 	for _, opt := range opts {
 		opt(&op)
 	}
-	return &serviceCombRegistry{cli: client, opts: op}
+	return &serviceCombRegistry{
+		cli:         client,
+		opts:        op,
+		lock:        &sync.RWMutex{},
+		registryIns: make(map[string]*scHeartbeat),
+	}
 }
 
 // Register a service info to ServiceComb
 func (scr *serviceCombRegistry) Register(info *registry.Info) error {
-	ctx := context.Background()
 	if info == nil {
 		return errors.New("registry.Info can not be empty")
 	}
@@ -104,6 +118,28 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 	}
 	if info.Addr == nil {
 		return errors.New("registry.Info Addr can not be empty")
+	}
+	host, port, err := net.SplitHostPort(info.Addr.String())
+	if err != nil {
+		return fmt.Errorf("parse registry info addr error: %w", err)
+	}
+	_, err = strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("parse registry info port error: %w", err)
+	}
+	if host == "" || host == "::" {
+		host, err = scr.getLocalIpv4Host()
+		if err != nil {
+			return fmt.Errorf("parse registry info addr error: %w", err)
+		}
+	}
+
+	instanceKey := fmt.Sprintf("%s:%s", info.ServiceName, info.Addr.String())
+	scr.lock.RLock()
+	_, ok := scr.registryIns[instanceKey]
+	scr.lock.RUnlock()
+	if ok {
+		return fmt.Errorf("instance{%s} already registered", instanceKey)
 	}
 
 	serviceID, err := scr.cli.RegisterService(&discovery.MicroService{
@@ -137,29 +173,15 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		return fmt.Errorf("register service instance error: %w", err)
 	}
 
-	go func(ctx context.Context, serviceId, instanceId string) {
-		defer func() {
-			if r := recover(); r != nil {
-				klog.CtxErrorf(ctx, "beat to ServerComb panic:%+v", r)
-				_ = scr.Deregister(info)
-			}
-		}()
-		ticker := time.NewTicker(time.Second * time.Duration(healthCheck.Interval))
-		for {
-			select {
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-			case <-ticker.C:
-				success, err := scr.cli.Heartbeat(serviceId, instanceId)
-				if err != nil || !success {
-					klog.CtxErrorf(ctx, "beat to ServerComb return error:%+v instance:%v", err, instanceId)
-					ticker.Stop()
-					return
-				}
-			}
-		}
-	}(ctx, serviceID, instanceId)
+	ctx, cancel := context.WithCancel(context.Background())
+	go scr.heartBeat(ctx, serviceID, instanceId)
+
+	scr.lock.Lock()
+	defer scr.lock.Unlock()
+	scr.registryIns[instanceKey] = &scHeartbeat{
+		instanceKey: instanceKey,
+		cancel:      cancel,
+	}
 
 	return nil
 }
@@ -176,6 +198,29 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 			return fmt.Errorf("deregister service error: %w", err)
 		}
 	} else {
+		instanceKey := fmt.Sprintf("%s:%s", info.ServiceName, info.Addr.String())
+		scr.lock.RLock()
+		insHeartbeat, ok := scr.registryIns[instanceKey]
+		scr.lock.RUnlock()
+		if !ok {
+			return fmt.Errorf("instance{%s} has not registered", instanceKey)
+		}
+
+		host, port, err := net.SplitHostPort(info.Addr.String())
+		if err != nil {
+			return err
+		}
+		_, err = strconv.Atoi(port)
+		if err != nil {
+			return fmt.Errorf("parse registry info port error: %w", err)
+		}
+		if host == "" || host == "::" {
+			host, err = scr.getLocalIpv4Host()
+			if err != nil {
+				return fmt.Errorf("parse registry info addr error: %w", err)
+			}
+		}
+
 		instanceId := ""
 		instances, err := scr.cli.FindMicroServiceInstances("", info.Tags["app_id"], info.ServiceName, info.Tags["version"], sc.WithoutRevision())
 		if err != nil {
@@ -186,14 +231,53 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 				instanceId = instance.InstanceId
 			}
 		}
-		klog.Info(instances)
 		if instanceId != "" {
 			_, err = scr.cli.UnregisterMicroServiceInstance(serviceId, instanceId)
 			if err != nil {
 				return fmt.Errorf("deregister service error: %w", err)
 			}
 		}
+
+		scr.lock.Lock()
+		insHeartbeat.cancel()
+		delete(scr.registryIns, instanceKey)
+		scr.lock.Unlock()
 	}
 
 	return nil
+}
+
+func (scr *serviceCombRegistry) heartBeat(ctx context.Context, serviceId string, instanceId string) {
+	ticker := time.NewTicker(time.Second * time.Duration(scr.opts.heartbeatInterval))
+	for {
+		select {
+		case <-ctx.Done():
+			ticker.Stop()
+			return
+		case <-ticker.C:
+			success, err := scr.cli.Heartbeat(serviceId, instanceId)
+			if err != nil || !success {
+				klog.CtxErrorf(ctx, "beat to ServerComb return error:%+v instance:%v", err, instanceId)
+				ticker.Stop()
+				return
+			}
+		}
+	}
+}
+
+func (scr *serviceCombRegistry) getLocalIpv4Host() (string, error) {
+	addr, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+	for _, addr := range addr {
+		ipNet, isIpNet := addr.(*net.IPNet)
+		if isIpNet && !ipNet.IP.IsLoopback() {
+			ipv4 := ipNet.IP.To4()
+			if ipv4 != nil {
+				return ipv4.String(), nil
+			}
+		}
+	}
+	return "", errors.New("not found ipv4 address")
 }

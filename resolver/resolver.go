@@ -81,9 +81,6 @@ func (scr *serviceCombResolver) Resolve(_ context.Context, desc string) (discove
 	if err != nil {
 		return discovery.Result{}, err
 	}
-	if len(res) == 0 {
-		return discovery.Result{}, fmt.Errorf("no instance remains for %v", desc)
-	}
 	instances := make([]discovery.Instance, 0, len(res))
 	for _, in := range res {
 		if in.Status != sc.MSInstanceUP {
