@@ -1,6 +1,6 @@
 # registry-servicecomb (*This is a community driven project*)
 
-use [service-comb](https://github.com/apache/servicecomb-service-center) as service discovery.
+Use [service-comb](https://github.com/apache/servicecomb-service-center) as service registry for `Kitex`.
 
 ## How to use?
 
