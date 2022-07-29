@@ -19,7 +19,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - name: Prepare Nacos
+      - name: Prepare Service-Comb-Center
         run: |
           make prepare
       - name: Check License Header
