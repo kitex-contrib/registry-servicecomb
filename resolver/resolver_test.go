@@ -80,7 +80,7 @@ func TestNewDefaultSCResolver(t *testing.T) {
 // TestSCResolverResolve test Resolve a service
 func TestSCResolverResolve(t *testing.T) {
 	type fields struct {
-		cli sc.Client
+		cli *sc.Client
 	}
 	type args struct {
 		ctx  context.Context
@@ -99,7 +99,7 @@ func TestSCResolverResolve(t *testing.T) {
 				ctx:  context.Background(),
 				desc: ServiceName,
 			},
-			fields: fields{cli: *SCClient},
+			fields: fields{cli: SCClient},
 		},
 		{
 			name: "wrong desc",
@@ -107,7 +107,7 @@ func TestSCResolverResolve(t *testing.T) {
 				ctx:  context.Background(),
 				desc: "xxxx.kitex-contrib.local",
 			},
-			fields:  fields{cli: *SCClient},
+			fields:  fields{cli: SCClient},
 			wantErr: true,
 		},
 	}
