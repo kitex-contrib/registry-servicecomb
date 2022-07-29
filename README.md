@@ -54,4 +54,7 @@ func main() {
 }
 ```
 
+## Compatibility
+Compatible with Service Comb Center v4.
+
 maintained by: [bodhisatan](https://github.com/bodhisatan)

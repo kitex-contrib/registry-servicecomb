@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
 	"sync"
 	"time"
 
@@ -123,10 +122,6 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 	if err != nil {
 		return fmt.Errorf("parse registry info addr error: %w", err)
 	}
-	_, err = strconv.Atoi(port)
-	if err != nil {
-		return fmt.Errorf("parse registry info port error: %w", err)
-	}
 	if host == "" || host == "::" {
 		host, err = scr.getLocalIpv4Host()
 		if err != nil {
@@ -163,7 +158,7 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 
 	instanceId, err := scr.cli.RegisterMicroServiceInstance(&discovery.MicroServiceInstance{
 		ServiceId:   serviceID,
-		Endpoints:   []string{info.Addr.String()},
+		Endpoints:   []string{host + ":" + port},
 		HostName:    scr.opts.hostName,
 		HealthCheck: healthCheck,
 		Status:      sc.MSInstanceUP,
@@ -208,18 +203,16 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 
 		host, port, err := net.SplitHostPort(info.Addr.String())
 		if err != nil {
-			return err
-		}
-		_, err = strconv.Atoi(port)
-		if err != nil {
-			return fmt.Errorf("parse registry info port error: %w", err)
+			return fmt.Errorf("parse deregistry info addr error: %w", err)
 		}
 		if host == "" || host == "::" {
 			host, err = scr.getLocalIpv4Host()
 			if err != nil {
-				return fmt.Errorf("parse registry info addr error: %w", err)
+				return fmt.Errorf("parse deregistry info addr error: %w", err)
 			}
 		}
+
+		addr := host + ":" + port
 
 		instanceId := ""
 		instances, err := scr.cli.FindMicroServiceInstances("", info.Tags["app_id"], info.ServiceName, info.Tags["version"], sc.WithoutRevision())
@@ -227,7 +220,7 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 			return fmt.Errorf("get instances error: %w", err)
 		}
 		for _, instance := range instances {
-			if funk.ContainsString(instance.Endpoints, info.Addr.String()) {
+			if funk.ContainsString(instance.Endpoints, addr) {
 				instanceId = instance.InstanceId
 			}
 		}
