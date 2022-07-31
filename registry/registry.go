@@ -240,7 +240,7 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 	return nil
 }
 
-func (scr *serviceCombRegistry) heartBeat(ctx context.Context, serviceId string, instanceId string) {
+func (scr *serviceCombRegistry) heartBeat(ctx context.Context, serviceId, instanceId string) {
 	ticker := time.NewTicker(time.Second * time.Duration(scr.opts.heartbeatInterval))
 	for {
 		select {
