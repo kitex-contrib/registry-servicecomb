@@ -8,9 +8,9 @@ Use [service-comb](https://github.com/apache/servicecomb-service-center) as serv
 ```go
 import (
 	// ...
-	kitexregistry "github.com/cloudwego/kitex/pkg/registry"
-	"github.com/cloudwego/kitex/server"
-	"github.com/kitex-contrib/registry-servicecomb/registry"
+    "github.com/cloudwego/kitex/pkg/rpcinfo"
+    "github.com/cloudwego/kitex/server"
+    "github.com/kitex-contrib/registry-servicecomb/registry"
 )
 
 // ...
@@ -23,7 +23,7 @@ func main() {
 	svr := hello.NewServer(
 		new(HelloImpl),
 		server.WithRegistry(r),
-		server.WithRegistryInfo(&kitexregistry.Info{ServiceName: "Hello"}),
+        server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: "Hello"}),
 		server.WithServiceAddr(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8080}),
 	)
 	if err := svr.Run(); err != nil {
