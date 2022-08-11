@@ -162,7 +162,6 @@ func (scr *serviceCombRegistry) Register(info *registry.Info) error {
 		HostName:    scr.opts.hostName,
 		HealthCheck: healthCheck,
 		Status:      sc.MSInstanceUP,
-		Properties:  info.Tags,
 	})
 	if err != nil {
 		return fmt.Errorf("register service instance error: %w", err)
@@ -215,7 +214,7 @@ func (scr *serviceCombRegistry) Deregister(info *registry.Info) error {
 		addr := host + ":" + port
 
 		instanceId := ""
-		instances, err := scr.cli.FindMicroServiceInstances("", info.Tags["app_id"], info.ServiceName, info.Tags["version"], sc.WithoutRevision())
+		instances, err := scr.cli.FindMicroServiceInstances("", scr.opts.appId, info.ServiceName, scr.opts.versionRule, sc.WithoutRevision())
 		if err != nil {
 			return fmt.Errorf("get instances error: %w", err)
 		}
