@@ -160,10 +160,6 @@ func TestSCMultipleInstances(t *testing.T) {
 	err = got.Deregister(&registry.Info{
 		ServiceName: ServiceName,
 		Addr:        &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8083},
-		Tags: map[string]string{
-			"app_id":  AppId,
-			"version": LatestVersion,
-		},
 	})
 	assert.Nil(t, err)
 	_, err = client.FindMicroServiceInstances("", AppId, ServiceName, LatestVersion, sc.WithoutRevision())
